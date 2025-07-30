@@ -5,8 +5,8 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { ApiError } from "../utils/ApiError.js";
 import { isValidObjectId } from "mongoose";
 import mongoose from "mongoose";
-import * as XLSX from 'xlsx';
-
+import * as XLSX from "xlsx";
+import { Attendance } from "../models/attendance.model.js";
 /**
  * Create a new HR record for an employee
  */
@@ -130,11 +130,7 @@ const deleteHRRecord = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(
-      new ApiResponse(
-        200,
-        hrRecord,
-        "HR record soft deleted successfully."
-      )
+      new ApiResponse(200, hrRecord, "HR record soft deleted successfully.")
     );
 });
 
@@ -387,18 +383,24 @@ const exportHRData = asyncHandler(async (req, res) => {
   }));
 
   // Excel
-if (format === "excel") {
-  const workbook = XLSX.utils.book_new();
-  const worksheet = XLSX.utils.json_to_sheet(exportData);
-  XLSX.utils.book_append_sheet(workbook, worksheet, "HR Records");
+  if (format === "excel") {
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    XLSX.utils.book_append_sheet(workbook, worksheet, "HR Records");
 
-  const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 
-  res.setHeader("Content-Disposition", "attachment; filename=hr_records.xlsx");
-  res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=hr_records.xlsx"
+    );
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
 
-  return res.status(200).send(buffer);
-}
+    return res.status(200).send(buffer);
+  }
 
   // CSV
   if (format === "csv") {
@@ -421,7 +423,190 @@ if (format === "excel") {
  * Create a leave request for an employee
  */
 const createLeaveRequest = asyncHandler(async (req, res) => {
-  // TODO: Implement
+  const { from, to, reason, type = "leave" } = req.body;
+  const requestedBy = req.user?._id;
+
+  if (!from || !to) {
+    throw new ApiError(400, "'From' and 'To' dates are required");
+  }
+
+  const startDate = new Date(from);
+  const endDate = new Date(to);
+  if (isNaN(startDate) || isNaN(endDate)) {
+    throw new ApiError(400, "Invalid date format");
+  }
+
+  startDate.setHours(0, 0, 0, 0);
+  endDate.setHours(0, 0, 0, 0);
+
+  const hr = await HR.findOne({ employee: requestedBy, isDeleted: false });
+  if (!hr) throw new ApiError(404, "HR profile not found");
+
+  // ======================= WEEK-OFF =======================
+  if (type === "weekoff") {
+    if (startDate.getTime() !== endDate.getTime()) {
+      throw new ApiError(400, "Week-off must be only one day");
+    }
+
+    const weekStart = new Date(startDate);
+    weekStart.setDate(weekStart.getDate() - weekStart.getDay()); // Sunday
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6); // Saturday
+    weekStart.setHours(0, 0, 0, 0);
+    weekEnd.setHours(23, 59, 59, 999);
+
+    // Check if week-off already exists in Attendance for this week
+    const existingAttendance = await Attendance.findOne({
+      employee: requestedBy,
+      date: { $gte: weekStart, $lte: weekEnd },
+      status: "weekoff",
+      isDeleted: false,
+    });
+
+    if (existingAttendance) {
+      return res.status(409).json(new ApiResponse(409, null, "Week-off already exists this week"));
+    }
+
+    // Check if week-off already requested this week
+    const existingRequest = hr.leaveRequests?.some(
+      (req) =>
+        req.type === "weekoff" &&
+        new Date(req.from) >= weekStart &&
+        new Date(req.to) <= weekEnd &&
+        req.status === "pending"
+    );
+
+    if (existingRequest) {
+      return res.status(409).json(new ApiResponse(409, null, "Week-off already requested this week"));
+    }
+
+    hr.leaveRequests.push({
+      from: startDate,
+      to: startDate,
+      reason,
+      type: "weekoff",
+      status: "pending",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    await hr.save();
+
+    return res.status(201).json(
+      new ApiResponse(201, {
+        type: "weekoff",
+        date: startDate.toISOString().split("T")[0],
+      }, "Week-off request submitted")
+    );
+  }
+
+  // =================== OTHER LEAVE TYPES ===================
+  if (endDate < startDate) {
+    throw new ApiError(400, "'To' date must be equal to or after 'From'");
+  }
+
+  // Build date range
+  const leaveDates = [];
+  for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+    leaveDates.push(new Date(d));
+  }
+
+  // Check attendance conflicts
+  const existingAttendance = await Attendance.find({
+    employee: requestedBy,
+    date: { $in: leaveDates },
+    isDeleted: false,
+  });
+
+  const existingDates = new Set(existingAttendance.map((r) => r.date.toISOString()));
+  const newLeaveDates = leaveDates.filter((d) => !existingDates.has(d.toISOString()));
+
+  if (!newLeaveDates.length) {
+    return res.status(409).json(new ApiResponse(409, null, "Leave already exists for selected dates"));
+  }
+
+  // Save to HR.leaveRequests[]
+  hr.leaveRequests.push({
+    from: startDate,
+    to: endDate,
+    reason,
+    type,
+    status: "pending",
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  await hr.save();
+
+  return res.status(201).json(
+    new ApiResponse(201, {
+      type,
+      dates: newLeaveDates.map((d) => d.toISOString().split("T")[0]),
+    }, "Leave request submitted")
+  );
+});
+// Get all leave requests for approval
+const getAllLeaveRequestsForApproval = asyncHandler(async (req, res) => {
+  const adminId = req.user?._id;
+
+  if (!isValidObjectId(adminId)) {
+    throw new ApiError(403, "Unauthorized access.");
+  }
+
+  const leaveData = await HR.aggregate([
+    {
+      $set: {
+        leaveRequestsArray: "$leaveRequests",
+      },
+    },
+    {
+      $unwind: {
+        path: "$leaveRequests",
+        includeArrayIndex: "leaveIndex",
+      },
+    },
+    {
+      $match: {
+        "leaveRequests.status": "pending",
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "employee",
+        foreignField: "_id",
+        as: "userDetails",
+      },
+    },
+    {
+      $unwind: "$userDetails",
+    },
+    {
+      $project: {
+        _id: 0,
+        hrId: "$_id",
+        leaveIndex: "$leaveIndex",
+        from: "$leaveRequests.from",
+        to: "$leaveRequests.to",
+        type: "$leaveRequests.type",
+        reason: "$leaveRequests.reason",
+        status: "$leaveRequests.status",
+        createdAt: "$leaveRequests.createdAt",
+        user: {
+          _id: "$userDetails._id",
+          name: "$userDetails.name",
+          email: "$userDetails.email",
+          role: "$userDetails.role",
+        },
+      },
+    },
+  ]);
+
+  res.status(200).json({
+    success: true,
+    count: leaveData.length,
+    leaveRequests: leaveData,
+  });
 });
 
 /**
@@ -442,34 +627,138 @@ const deleteLeaveRequest = asyncHandler(async (req, res) => {
  * Approve a leave request
  */
 const approveLeaveRequest = asyncHandler(async (req, res) => {
-  // TODO: Implement
+  const { id: employeeId, leaveIndex } = req.params;
+  const approvedBy = req.user?._id;
+
+  const index = parseInt(leaveIndex, 10);
+  if (!isValidObjectId(employeeId)) {
+    throw new ApiError(400, "Invalid employee ID");
+  }
+
+  const hr = await HR.findOne({ employee: employeeId, isDeleted: false });
+  if (!hr) throw new ApiError(404, "HR profile not found");
+
+  const leaveReq = hr.leaveRequests?.[index];
+  if (!leaveReq) throw new ApiError(404, "Leave request not found");
+
+  const { from, to, reason, type } = leaveReq;
+  const startDate = new Date(from);
+  const endDate = new Date(to);
+  startDate.setHours(0, 0, 0, 0);
+  endDate.setHours(0, 0, 0, 0);
+
+  if (endDate < startDate) {
+    throw new ApiError(400, "'To' date must be equal to or after 'From'");
+  }
+
+  const dates = [];
+  for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
+    dates.push(new Date(d));
+  }
+
+  // ======================== WEEK-OFF APPROVAL ========================
+  if (type === "weekoff") {
+    if (dates.length !== 1) {
+      throw new ApiError(400, "Week-off must have only one date");
+    }
+
+    const existing = await Attendance.findOne({
+      employee: employeeId,
+      date: dates[0],
+      status: "weekoff",
+      isDeleted: false,
+    });
+
+    if (existing) {
+      throw new ApiError(409, "Week-off already exists for that date");
+    }
+
+    await Attendance.create({
+      employee: employeeId,
+      date: dates[0],
+      status: "weekoff",
+      type: "system",
+    });
+
+    hr.leaveRequests.splice(index, 1);
+    await hr.save();
+
+    return res.status(200).json(
+      new ApiResponse(200, null, `Week-off approved and added to attendance`)
+    );
+  }
+
+  // ==================== OTHER LEAVE TYPES APPROVAL ====================
+  const existing = await Attendance.find({
+    employee: employeeId,
+    date: { $in: dates },
+    isDeleted: false,
+  });
+
+  const toISO = (d) => new Date(d.setHours(0, 0, 0, 0)).toISOString();
+  const existingSet = new Set(existing.map((r) => toISO(r.date)));
+
+  const toInsert = dates
+    .filter((d) => !existingSet.has(toISO(d)))
+    .map((date) => ({
+      employee: employeeId,
+      date,
+      reason,
+      status: type,
+      type: "system",
+      source: "approved",
+      approvedBy,
+    }));
+
+  if (!toInsert.length) {
+    throw new ApiError(409, "All requested leave dates already exist");
+  }
+
+  await Attendance.insertMany(toInsert);
+
+  hr.leaveRequests.splice(index, 1);
+  await hr.save();
+
+  return res.status(200).json(
+    new ApiResponse(200, null, `Leave request approved and added to attendance`)
+  );
 });
 
 /**
  * Reject a leave request
  */
 const rejectLeaveRequest = asyncHandler(async (req, res) => {
-  // TODO: Implement
+  const { id: employeeId, leaveIndex } = req.params;
+  const rejectedBy = req.user?._id;
+
+  const index = parseInt(leaveIndex, 10);
+  if (!isValidObjectId(employeeId)) {
+    throw new ApiError(400, "Invalid employee ID");
+  }
+
+  const hr = await HR.findOne({ employee: employeeId, isDeleted: false });
+  if (!hr) throw new ApiError(404, "HR profile not found");
+
+  const leaveReq = hr.leaveRequests?.[index];
+  if (!leaveReq) throw new ApiError(404, "Leave request not found");
+
+  // Optionally store rejection metadata before removal
+  // leaveReq.status = "rejected"; leaveReq.rejectedBy = rejectedBy; leaveReq.rejectedAt = new Date();
+
+  // Simply remove the leave request
+  hr.leaveRequests.splice(index, 1);
+  await hr.save();
+
+  return res.status(200).json(
+    new ApiResponse(200, null, "Leave request rejected and removed from HR record")
+  );
 });
+
 
 /**
  * Get leave history for an employee
  */
 const getEmployeeLeaveHistory = asyncHandler(async (req, res) => {
-  // TODO: Implement
-});
-
-/**
- * Get all leave requests (optionally filtered)
- */
-const getAllLeaveRequests = asyncHandler(async (req, res) => {
-  // TODO: Implement
-});
-
-/**
- * Get all pending leave requests
- */
-const getPendingLeaveRequests = asyncHandler(async (req, res) => {
   // TODO: Implement
 });
 
@@ -491,13 +780,6 @@ const getLeaveRequestsInDateRange = asyncHandler(async (req, res) => {
  * Get leave summary by status for an employee
  */
 const getLeaveSummaryByStatus = asyncHandler(async (req, res) => {
-  // TODO: Implement
-});
-
-/**
- * Get leave requests pending approval by a user
- */
-const getLeaveRequestsForApproval = asyncHandler(async (req, res) => {
   // TODO: Implement
 });
 
@@ -528,42 +810,56 @@ const getOnboardingEmployees = asyncHandler(async (req, res) => {
  * Submit resignation for an employee
  */
 const submitResignation = asyncHandler(async (req, res) => {
-  // TODO: Implement
-});
+  const { id } = req.params;
 
-/**
- * Update resignation status
- */
-const updateResignationStatus = asyncHandler(async (req, res) => {
-  // TODO: Implement
-});
+  if (!isValidObjectId(id)) {
+    throw new ApiError(400, "Invalid employee ID.");
+  }
 
-/**
- * Get all resigned employees
- */
-const getResignedEmployees = asyncHandler(async (req, res) => {
-  // TODO: Implement
-});
+  const employee = await User.findOne({
+    _id: id,
+    isActive: true,
+  }).select("_id fullName email username");
 
-/**
- * Get all employees currently serving notice period
- */
-const getActiveNoticePeriods = asyncHandler(async (req, res) => {
-  // TODO: Implement
+  if (!employee) {
+    throw new ApiError(404, "Active employee not found.");
+  }
+
+  const updated = await HR.findOneAndUpdate(
+    {
+      employee: employee._id,
+      resignationStatus: { $in: ["none", "rejected"] },
+      isDeleted: false,
+    },
+    {
+      $set: {
+        resignationStatus: "resigned",
+        noticePeriod: req.body.noticePeriod?.trim() || null,
+        updatedAt: new Date(),
+      },
+    },
+    { new: true }
+  ).populate("employee", "fullName email username");
+
+  if (!updated) {
+    throw new ApiError(
+      400,
+      "Unable to submit resignation. Either already submitted or not onboarded."
+    );
+  }
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(
+        200,
+        updated,
+        `Resignation submitted for ${employee.fullName}.`
+      )
+    );
 });
 
 // ===================== SuperAdmin/HR Management =====================
-
-/**
- * Get all superadmin HR records
- */
-const getSuperAdmins = asyncHandler(async (req, res) => {
-  // TODO: Implement
-});
-
-/**
- * Get all active (non-deleted, non-resigned) employees
- */
 const getActiveEmployees = asyncHandler(async (req, res) => {
   let {
     page = 1,
@@ -704,7 +1000,8 @@ const getActiveEmployees = asyncHandler(async (req, res) => {
   // Handle Excel Export (no pagination)
   if (isExport) {
     const exportData = await HR.aggregate(pipeline);
-    if (!exportData.length) throw new ApiError(404, "No active employees found");
+    if (!exportData.length)
+      throw new ApiError(404, "No active employees found");
 
     const flatData = exportData.map((item) => ({
       Name: item.employee.fullName,
@@ -716,7 +1013,9 @@ const getActiveEmployees = asyncHandler(async (req, res) => {
       Onboarding: item.onboardingStatus,
       Resignation: item.resignationStatus,
       NoticePeriod: item.noticePeriod,
-      DOJ: item.employee.doj ? new Date(item.employee.doj).toLocaleDateString() : "",
+      DOJ: item.employee.doj
+        ? new Date(item.employee.doj).toLocaleDateString()
+        : "",
     }));
 
     const workbook = XLSX.utils.book_new();
@@ -725,7 +1024,10 @@ const getActiveEmployees = asyncHandler(async (req, res) => {
 
     const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 
-    res.setHeader("Content-Disposition", "attachment; filename=active_employees.xlsx");
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=active_employees.xlsx"
+    );
     res.setHeader(
       "Content-Type",
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -756,8 +1058,21 @@ const getActiveEmployees = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .json(new ApiResponse(200, responseData, "Active employees fetched successfully"));
+    .json(
+      new ApiResponse(
+        200,
+        responseData,
+        "Active employees fetched successfully"
+      )
+    );
 });
+/**
+ * Get all superadmin HR records
+ */
+const getSuperAdmins = asyncHandler(async (req, res) => {
+  // TODO: Implement
+});
+
 
 export {
   createHRRecord,
@@ -775,19 +1090,14 @@ export {
   approveLeaveRequest,
   rejectLeaveRequest,
   getEmployeeLeaveHistory,
-  getAllLeaveRequests,
-  getPendingLeaveRequests,
   getLeaveRequestsByType,
   getLeaveRequestsInDateRange,
   getLeaveSummaryByStatus,
-  getLeaveRequestsForApproval,
   startOnboarding,
   updateOnboardingStatus,
   getOnboardingEmployees,
   submitResignation,
-  updateResignationStatus,
-  getResignedEmployees,
-  getActiveNoticePeriods,
   getSuperAdmins,
+  getAllLeaveRequestsForApproval,
   getActiveEmployees,
 };

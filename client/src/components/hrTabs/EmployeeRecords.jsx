@@ -36,7 +36,8 @@ const EmployeeRecords = () => {
   const { handleUpdateHRRecord, loading: updateLoading } = useUpdateHRRecord();
   const { handleCreateHRRecord, loading: createLoading } = useCreateHRRecord();
   const { handleDeleteHRRecord, loading: deleteLoading } = useDeleteHRRecord();
-  const { handleRestoreHRRecord, loading: restoreLoading } = useRestoreHRRecord();
+  const { handleRestoreHRRecord, loading: restoreLoading } =
+    useRestoreHRRecord();
   const { handleExportHRData, loading: exportLoading } = useExportHRData();
 
   const {
@@ -45,20 +46,27 @@ const EmployeeRecords = () => {
     loading,
   } = useSearchHRRecords();
 
-  const handleSearch = () => {
-    const queryParams = new URLSearchParams();
-    if (searchTerm) queryParams.set("q", searchTerm);
-    if (filters.deleted) queryParams.set("deleted", filters.deleted);
-    if (filters.onboardingStatus)
-      queryParams.set("onboardingStatus", filters.onboardingStatus);
-    if (filters.resignationStatus)
-      queryParams.set("resignationStatus", filters.resignationStatus);
-    queryParams.set("page", page);
-    queryParams.set("limit", PAGE_SIZE.toString());
+const handleSearch = (customPage = page) => {
+  const queryParams = new URLSearchParams();
+  if (searchTerm) queryParams.set("q", searchTerm);
+  if (filters.deleted) queryParams.set("deleted", filters.deleted);
+  if (filters.onboardingStatus)
+    queryParams.set("onboardingStatus", filters.onboardingStatus);
+  if (filters.resignationStatus)
+    queryParams.set("resignationStatus", filters.resignationStatus);
 
-    setSearchParams(queryParams);
-    handleSearchHRRecords(queryParams.toString());
-  };
+  queryParams.set("page", customPage);
+  queryParams.set("limit", PAGE_SIZE.toString());
+
+  setSearchParams(queryParams);
+  handleSearchHRRecords(queryParams.toString());
+};
+
+useEffect(() => {
+  setPage(1);
+  handleSearch(1);
+}, [searchTerm, filters]);
+
 
   const handleModalOpen = (record = null) => {
     if (record) {
@@ -80,10 +88,8 @@ const EmployeeRecords = () => {
     try {
       if (editingId) {
         await handleUpdateHRRecord(editingId, formValues);
-        toast.success("Record updated");
       } else {
         await handleCreateHRRecord(formValues, null);
-        toast.success("Record created");
       }
       setIsModalOpen(false);
       setFormValues({});
@@ -100,7 +106,8 @@ const EmployeeRecords = () => {
   };
 
   const handleRestore = async (id) => {
-    if (!window.confirm("Are you sure you want to restore this record?")) return;
+    if (!window.confirm("Are you sure you want to restore this record?"))
+      return;
     await handleRestoreHRRecord(id);
     handleSearch();
   };
@@ -115,10 +122,10 @@ const EmployeeRecords = () => {
     );
   };
 
-  useEffect(() => {
-    const queryParams = new URLSearchParams(searchParams.toString());
-    handleSearchHRRecords(queryParams.toString());
-  }, []);
+useEffect(() => {
+  handleSearch();
+}, []);
+
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -132,74 +139,74 @@ const EmployeeRecords = () => {
 
   return (
     <div className="p-4 xxs:p-2 xs:p-4 sm:p-6 md:p-8 space-y-6 sm:space-y-8 font-inter text-gray-900 dark:text-gray-100 bg-white dark:bg-[#0f0f0f] rounded-2xl shadow-xl transition-all duration-300">
-  {/* Filters & Actions */}
-  <div className="flex flex-col xxs:flex-col sm:flex-col md:flex-row justify-between items-start md:items-center gap-4 sm:gap-6">
-    <RecordFilters
-      searchTerm={searchTerm}
-      setSearchTerm={setSearchTerm}
-      filters={filters}
-      setFilters={setFilters}
-    />
-    <RecordActions
-      handleSearch={handleSearch}
-      handleModalOpen={handleModalOpen}
-      createLoading={createLoading}
-      handleExport={handleExport}
-      Button={Button}
-      exportLoading={exportLoading}
-    />
-  </div>
-
-  {/* Records Table */}
-  <div className="rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-md transition overflow-x-auto">
-    <EmployeeRecordTable
-      loading={loading}
-      records={records}
-      selected={selected}
-      toggleSelect={toggleSelect}
-      handleModalOpen={handleModalOpen}
-      updateLoading={updateLoading}
-      handleDelete={handleDelete}
-      handleRestore={handleRestore}
-      deleteLoading={deleteLoading}
-      restoreLoading={restoreLoading}
-    />
-  </div>
-
-  {/* Pagination */}
-  <div className="flex justify-center sm:justify-end pt-4">
-    <Pagination
-      page={page}
-      setPage={setPage}
-      searchParams={searchParams}
-      setSearchParams={setSearchParams}
-      handleSearch={handleSearch}
-      hasNextPage={records.length === PAGE_SIZE}
-      Button={Button}
-    />
-  </div>
-
-  {/* Modal */}
-  {isModalOpen && (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 xs:p-4">
-      <div
-        ref={modalRef}
-        className="w-full max-w-lg sm:max-w-xl rounded-2xl bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 shadow-2xl transition-all p-4 sm:p-6"
-      >
-        <EmployeeRecordModal
-          editingId={editingId}
-          setIsModalOpen={setIsModalOpen}
-          formValues={formValues}
-          setFormValues={setFormValues}
-          handleSubmit={handleSubmit}
+      {/* Filters & Actions */}
+      <div className="flex flex-col xxs:flex-col sm:flex-col md:flex-row justify-between items-start md:items-center gap-4 sm:gap-6">
+        <RecordFilters
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          filters={filters}
+          setFilters={setFilters}
+        />
+        <RecordActions
+          handleSearch={handleSearch}
+          handleModalOpen={handleModalOpen}
           createLoading={createLoading}
+          handleExport={handleExport}
+          Button={Button}
+          exportLoading={exportLoading}
+        />
+      </div>
+
+      {/* Records Table */}
+      <div className="rounded-xl border border-gray-200 dark:border-neutral-800 bg-white dark:bg-neutral-900 shadow-md transition overflow-x-auto">
+        <EmployeeRecordTable
+          loading={loading}
+          records={records}
+          selected={selected}
+          toggleSelect={toggleSelect}
+          handleModalOpen={handleModalOpen}
           updateLoading={updateLoading}
+          handleDelete={handleDelete}
+          handleRestore={handleRestore}
+          deleteLoading={deleteLoading}
+          restoreLoading={restoreLoading}
+        />
+      </div>
+
+      {/* Pagination */}
+      <div className="flex justify-center sm:justify-end pt-4">
+        <Pagination
+          page={page}
+          setPage={setPage}
+          searchParams={searchParams}
+          setSearchParams={setSearchParams}
+          handleSearch={handleSearch}
+          hasNextPage={records.length === PAGE_SIZE}
           Button={Button}
         />
       </div>
+
+      {/* Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-2 xs:p-4">
+          <div
+            ref={modalRef}
+            className="w-full max-w-lg sm:max-w-xl rounded-2xl bg-white dark:bg-neutral-900 border border-gray-200 dark:border-neutral-800 shadow-2xl transition-all p-4 sm:p-6"
+          >
+            <EmployeeRecordModal
+              editingId={editingId}
+              setIsModalOpen={setIsModalOpen}
+              formValues={formValues}
+              setFormValues={setFormValues}
+              handleSubmit={handleSubmit}
+              createLoading={createLoading}
+              updateLoading={updateLoading}
+              Button={Button}
+            />
+          </div>
+        </div>
+      )}
     </div>
-  )}
-</div>
   );
 };
 

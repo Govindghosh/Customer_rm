@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import {COMPANY_INFO} from "./constantCompany.js";
 
 const sendEmail = async (options) => {
   const transporter = nodemailer.createTransport({
@@ -10,7 +11,7 @@ const sendEmail = async (options) => {
   });
 
   const mailOptions = {
-    from: `"iSmart Govind Ghosh" <${process.env.SMTP_MAIL}>`,
+    from: `"${COMPANY_INFO.LEGAL_NAME}" <${process.env.SMTP_MAIL}>`,
     to: options.to,
     subject: options.subject,
     text:
@@ -21,24 +22,24 @@ const sendEmail = async (options) => {
   <!-- Header -->
   <div style="background:linear-gradient(135deg,#ffffff,#f3f4f6);padding:30px;text-align:center;border-bottom:1px solid #e5e7eb;">
     <div style="background-color:#fff;padding:10px;border-radius:12px;display:inline-block;">
-      <img src="https://yashopticsandlens.com/types-of-lenses/iseries-custom-progressive-lenses/ismart-intermediate-progressive-lenses/" alt="iSmart Govind Ghosh" style="height:65px;margin-bottom:10px;border-radius:50%;" />
+      <img src="${COMPANY_INFO.LOGO_URL}" alt="${COMPANY_INFO.LEGAL_NAME}" style="height:65px;margin-bottom:10px;border-radius:50%;" />
     </div>
-    <h1 style="margin:10px 0 0;color:#111;font-size:24px;">iSmart Govind Ghosh</h1>
-    <p style="font-size:14px;color:#666;margin-top:4px;">Drive Traffic, Generate Leads, Achieve Success</p>
+    <h1 style="margin:10px 0 0;color:#111;font-size:24px;">${COMPANY_INFO.LEGAL_NAME}</h1>
+    <p style="font-size:14px;color:#666;margin-top:4px;">${COMPANY_INFO.TAGLINE}</p>
   </div>
 
   <!-- Body -->
   <div style="padding:30px;">
     <h2 style="color:#333;margin-top:0;">Hi ${options.name || "there"},</h2>
     <p style="font-size:15px;line-height:1.6;">
-      We received a request to reset your password. If this was you, click the button below to create a new one.
+      ${options.text || "You requested a password reset. Click the button below to reset your password."}
     </p>
 
     <div style="text-align:center;margin:30px 0;">
       <a href="${options.resetUrl}" 
          style="background:#6c5ce7;color:#fff;padding:12px 24px;border-radius:6px;
          font-size:16px;text-decoration:none;display:inline-block;font-weight:bold;">
-        Reset Password
+         ${options.btnName || "Reset Password"}
       </a>
     </div>
 
@@ -50,17 +51,17 @@ const sendEmail = async (options) => {
     </p>
 
     <p style="font-size:14px;margin-top:20px;">
-      This link will expire in <strong>${options.expireTime || "5 minutes"}</strong>.
+      This link will expire in <strong>${options.expireTime || "2 days"}</strong>.
     </p>
 
     <p style="font-size:14px;color:#555;margin-top:30px;">
-      Didn’t request a password reset? Just ignore this email — your password will remain unchanged.
+      Didn't request a password reset? Just ignore this email — your password will remain unchanged
     </p>
 
     <hr style="border:none;border-top:1px solid #eee;margin:30px 0;" />
 
     <p style="font-size:14px;text-align:center;">
-      Need help? <a href="mailto:contact@addgod.in" style="color:#6c5ce7;text-decoration:none;">Contact support</a>
+      Need help? <a href="mailto:${COMPANY_INFO.CONTACT.EMAIL}" style="color:#6c5ce7;text-decoration:none;">Contact support</a>
     </p>
   </div>
 
@@ -68,26 +69,26 @@ const sendEmail = async (options) => {
   <div style="background:#f9fafb;padding:20px;text-align:center;font-size:12px;color:#999;">
     <p style="margin:0;">Stay connected</p>
     <div style="margin:10px 0;">
-      <a href="https://facebook.com" style="margin:0 6px;">
+      <a href="${COMPANY_INFO.SOCIALS.FACEBOOK || "#"}" style="margin:0 6px;">
         <img src="https://cdn-icons-png.flaticon.com/512/733/733547.png" width="20" alt="Facebook" />
       </a>
-      <a href="https://instagram.com" style="margin:0 6px;">
+      <a href="${COMPANY_INFO.SOCIALS.INSTAGRAM}" style="margin:0 6px;">
         <img src="https://cdn-icons-png.flaticon.com/512/2111/2111463.png" width="20" alt="Instagram" />
       </a>
-      <a href="https://twitter.com" style="margin:0 6px;">
+      <a href="${COMPANY_INFO.SOCIALS.TWITTER}" style="margin:0 6px;">
         <img src="https://cdn-icons-png.flaticon.com/512/733/733579.png" width="20" alt="Twitter" />
       </a>
-      <a href="https://linkedin.com" style="margin:0 6px;">
+      <a href="${COMPANY_INFO.SOCIALS.LINKEDIN}" style="margin:0 6px;">
         <img src="https://cdn-icons-png.flaticon.com/512/174/174857.png" width="20" alt="LinkedIn" />
       </a>
     </div>
-    <p style="margin:10px 0 0;">&copy; ${new Date().getFullYear()} iSmart Govind Ghosh. All rights reserved.</p>
-    <p style="margin:2px 0;">Plot No. 289, Chaitanya Vihar Phase-2, Vrindavan, 281121</p>
-    <p style="margin:2px 0;">+91 9557323701 | <a href="mailto:contact@addgod.in" style="color:#6c5ce7;text-decoration:none;">contact@addgod.in</a></p>
-    <p style="margin:2px 0;"><a href="https://addgod.in" style="color:#6c5ce7;text-decoration:none;">addgod.in</a></p>
+    <p style="margin:10px 0 0;">${COMPANY_INFO.COPYRIGHT}</p>
+    <p style="margin:2px 0;">${COMPANY_INFO.HEADQUARTERS.CITY}, ${COMPANY_INFO.HEADQUARTERS.COUNTRY}</p>
+    <p style="margin:2px 0;">${COMPANY_INFO.CONTACT.PHONE} | <a href="mailto:${COMPANY_INFO.CONTACT.EMAIL}" style="color:#6c5ce7;text-decoration:none;">${COMPANY_INFO.CONTACT.EMAIL}</a></p>
+    <p style="margin:2px 0;"><a href="${COMPANY_INFO.CONTACT.WEBSITE}" style="color:#6c5ce7;text-decoration:none;">${COMPANY_INFO.CONTACT.WEBSITE}</a></p>
   </div>
 </div>
-`,
+    `,
   };
 
   await transporter.sendMail(mailOptions);

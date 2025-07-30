@@ -498,6 +498,7 @@ export const deleteAllWeekOffs = asyncHandler(async (req, res) => {
     message: `${result.deletedCount} 'week-off' records deleted successfully.`,
   });
 });
+
 export {
   createAttendance,
   updateAttendance,

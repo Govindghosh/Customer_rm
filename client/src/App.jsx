@@ -13,12 +13,14 @@ import Department from "./pages/Department";
 import AttendancePage from "./pages/AttendancePage";
 import HrPage from "./pages/HrPage";
 import AuthInitializer from "./components/AuthInitializer";
+import NotFound from "./pages/NotFound";
 
 import "./App.css";
 function App() {
   return (
     <AuthInitializer>
       <Routes>
+        <Route path="*" element={<NotFound />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
         <Route path="/users/:username" element={<PublicProfilePage />} />

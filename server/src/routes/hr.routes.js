@@ -15,20 +15,15 @@ import {
   approveLeaveRequest,
   rejectLeaveRequest,
   getEmployeeLeaveHistory,
-  getAllLeaveRequests,
-  getPendingLeaveRequests,
   getLeaveRequestsByType,
   getLeaveRequestsInDateRange,
   getLeaveSummaryByStatus,
-  getLeaveRequestsForApproval,
   startOnboarding,
   updateOnboardingStatus,
   getOnboardingEmployees,
   submitResignation,
-  updateResignationStatus,
-  getResignedEmployees,
-  getActiveNoticePeriods,
   getSuperAdmins,
+  getAllLeaveRequestsForApproval,
   getActiveEmployees,
 } from "../controllers/hr.controller.js";
 
@@ -56,20 +51,20 @@ router.delete(
   verifyJWT,
   roleBasedAccess("admin", "superadmin", "hr", "manager"),
   deleteHRRecord
-);
+); // done
 router.patch(
   "/:id/restore",
   verifyJWT,
   roleBasedAccess("admin", "superadmin", "hr", "manager"),
   restoreHRRecord
-);
+); // done
 router.get("/employee/:employeeId", verifyJWT, getHRByEmployeeId);
 router.get(
   "/",
   verifyJWT,
   roleBasedAccess("admin", "superadmin", "hr", "manager"),
   getAllHRRecords
-);
+); // done
 router.get(
   "/search",
   verifyJWT,
@@ -90,34 +85,32 @@ router.get(
 );
 
 // ===================== Leave Management =====================
-router.post("/:id/leave", verifyJWT, createLeaveRequest);
+router.post("/:id/leave", verifyJWT, createLeaveRequest); // done
 router.put("/:id/leave/:leaveIndex", verifyJWT, updateLeaveRequest);
 router.delete("/:id/leave/:leaveIndex", verifyJWT, deleteLeaveRequest);
 router.patch(
   "/:id/leave/:leaveIndex/approve",
   verifyJWT,
-  roleBasedAccess("admin", "superadmin"),
+  roleBasedAccess("admin", "superadmin", "hr", "manager"),
   approveLeaveRequest
-);
+); // done
+router.get(
+  "/getAllLeaveRequestsForApproval",
+  verifyJWT,
+  roleBasedAccess("admin", "superadmin", "hr", "manager"),
+  getAllLeaveRequestsForApproval
+); // done
 router.patch(
   "/:id/leave/:leaveIndex/reject",
   verifyJWT,
-  roleBasedAccess("admin", "superadmin"),
+  roleBasedAccess("admin", "superadmin", "hr", "manager"),
   rejectLeaveRequest
 );
 
 router.get("/:id/leave/history", verifyJWT, getEmployeeLeaveHistory);
-router.get("/leaves", verifyJWT, getAllLeaveRequests);
-router.get("/leaves/pending", verifyJWT, getPendingLeaveRequests);
 router.get("/leaves/type/:type", verifyJWT, getLeaveRequestsByType);
 router.get("/leaves/date-range", verifyJWT, getLeaveRequestsInDateRange);
 router.get("/:id/leave/summary", verifyJWT, getLeaveSummaryByStatus);
-router.get(
-  "/leaves/for-approval",
-  verifyJWT,
-  roleBasedAccess("admin", "superadmin"),
-  getLeaveRequestsForApproval
-);
 
 // ===================== Onboarding & Resignation =====================
 router.post(
@@ -135,14 +128,7 @@ router.patch(
 router.get("/onboarding/in-progress", verifyJWT, getOnboardingEmployees);
 
 router.post("/:id/resignation", verifyJWT, submitResignation);
-router.patch(
-  "/:id/resignation/status",
-  verifyJWT,
-  roleBasedAccess("admin", "superadmin"),
-  updateResignationStatus
-);
-router.get("/resigned", verifyJWT, getResignedEmployees);
-router.get("/notice-period", verifyJWT, getActiveNoticePeriods);
+
 
 // ===================== SuperAdmin & Active Employees =====================
 router.get(
